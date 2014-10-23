@@ -1,0 +1,109 @@
+package org.fastlane.stats;
+
+import java.util.Properties;
+
+import javax.annotation.Resource;
+import javax.persistence.EntityManagerFactory;
+import javax.sql.DataSource;
+
+import org.fastlane.stats.scraper.ScrapeExecutor;
+import org.fastlane.stats.scraper.ScrapeExecutorImpl;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.PropertySource;
+import org.springframework.core.env.Environment;
+import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseBuilder;
+import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseType;
+import org.springframework.orm.hibernate4.HibernateExceptionTranslator;
+import org.springframework.orm.jpa.JpaTransactionManager;
+import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
+import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
+import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.EnableTransactionManagement;
+
+@Configuration
+//scheduler:
+@EnableAsync
+@EnableScheduling
+//spring-data:
+@EnableJpaRepositories
+@EnableTransactionManagement
+@PropertySource("classpath:config.properties")
+public class SpringConfigLocal {
+
+	   private static final String PROPERTY_NAME_DATABASE_DRIVER = "db.driver";
+	   private static final String PROPERTY_NAME_DATABASE_PASSWORD = "db.password";
+	   private static final String PROPERTY_NAME_DATABASE_URL = "db.url";
+	   private static final String PROPERTY_NAME_DATABASE_USERNAME = "db.username";
+	   private static final String PROPERTY_NAME_HIBERNATE_DIALECT = "hibernate.dialect";
+	   private static final String PROPERTY_NAME_HIBERNATE_SHOW_SQL = "hibernate.show_sql";
+
+	   private static final String PROPERTY_NAME_ENTITYMANAGER_PACKAGES_TO_SCAN = "entitymanager.packages.to.scan";
+	   
+//	   private static final String PROPERTY_NAME_SCRAPE_INTERVAL = "scrape.interval";
+	   private static final String PROPERTY_NAME_SCRAPE_URL = "scrape.url";
+
+	   @Resource
+	   private Environment env;
+
+
+	  @Bean
+	  public DataSource dataSource() {	
+		  EmbeddedDatabaseBuilder builder = new EmbeddedDatabaseBuilder();
+		  return builder.setType(EmbeddedDatabaseType.HSQL).build();
+/*		  
+		  DriverManagerDataSource dataSource = new DriverManagerDataSource();
+		  dataSource.setDriverClassName(env.getRequiredProperty(PROPERTY_NAME_DATABASE_DRIVER));
+		  dataSource.setUrl(env.getRequiredProperty(PROPERTY_NAME_DATABASE_URL));
+		  dataSource.setUsername(env.getRequiredProperty(PROPERTY_NAME_DATABASE_USERNAME));
+		  dataSource.setPassword(env.getRequiredProperty(PROPERTY_NAME_DATABASE_PASSWORD));
+		  return dataSource;
+*/
+	  }
+	
+	  @Bean
+	  public EntityManagerFactory entityManagerFactory() {	
+		  HibernateJpaVendorAdapter vendorAdapter = new HibernateJpaVendorAdapter();
+		  vendorAdapter.setGenerateDdl(true);
+	
+		  LocalContainerEntityManagerFactoryBean factory = new LocalContainerEntityManagerFactoryBean();
+		  factory.setJpaVendorAdapter(vendorAdapter);
+		  factory.setPackagesToScan(env.getRequiredProperty(PROPERTY_NAME_ENTITYMANAGER_PACKAGES_TO_SCAN));
+		  factory.setDataSource(dataSource());
+/*		  factory.setPersistenceProviderClass(HibernatePersistenceProvider.class);
+		  factory.setJpaProperties(hibernateProperties());
+*/
+		  
+		  factory.afterPropertiesSet();
+	
+	    return factory.getObject();
+	  }
+	
+	  private Properties hibernateProperties() {
+	    	Properties properties = new Properties();
+	    	properties.put(PROPERTY_NAME_HIBERNATE_DIALECT, env.getRequiredProperty(PROPERTY_NAME_HIBERNATE_DIALECT));
+	    	properties.put(PROPERTY_NAME_HIBERNATE_SHOW_SQL, env.getRequiredProperty(PROPERTY_NAME_HIBERNATE_SHOW_SQL));
+	    	return properties;
+	  }
+
+	  
+	  @Bean
+	  public PlatformTransactionManager transactionManager() {	
+		  JpaTransactionManager txManager = new JpaTransactionManager();
+		  txManager.setEntityManagerFactory(entityManagerFactory());
+		  return txManager;
+	  }
+
+	  @Bean 
+	  public HibernateExceptionTranslator hibernateExceptionTranslator(){ 
+		  return new HibernateExceptionTranslator(); 
+	  }
+	  
+	  @Bean
+	  public ScrapeExecutor scrapeExecutor() {
+		  return new ScrapeExecutorImpl(env.getRequiredProperty(PROPERTY_NAME_SCRAPE_URL));
+	  }
+}
